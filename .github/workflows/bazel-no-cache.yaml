@@ -1,9 +1,10 @@
-name: Bazel-no-cache
+name: Bazel-cache-clean
 on:
   push:
     branches:
       - "test-sha-ci"
       - "test-sha-diff"
+
 jobs:
   bazel:
     runs-on: ubuntu-22.04
@@ -17,20 +18,18 @@ jobs:
           large-packages: false  # this is slow
       - uses: actions/checkout@v4
       - uses: bazelbuild/setup-bazelisk@v2
-      - run: bazel build ...
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+      - name: Mount bazel cache
+        uses: actions/cache@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Get bazel binaries, so they can be pushed as GitHub artifacts in the next step
+          path: "~/.cache/bazel"
+          # Configure cache updates
+          # https://github.com/actions/cache/blob/main/tips-and-workarounds.md#update-a-cache
+          # https://github.com/actions/cache/blob/main/examples.md#---bazel
+          key: ${{ runner.os }}-bazel-${{ hashFiles('.bazelversion', '.bazelrc', 'WORKSPACE', 'WORKSPACE.bazel', 'MODULE.bazel', 'Cargo.Bazel.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bazel-
+      - name: Clean Bazel
         run: |
-          set -eExuo pipefail
-          # query the location of the bazel "dre" binary and copy it to the "release" directory
-          mkdir -p release
-          cp --dereference bazel-out/k8-opt/bin/rs/cli/dre release/dre
-          chmod +x release/dre
-      - name: Push images to GitHub Container Registry
-        run:
-          bazel query --noshow_progress 'kind("oci_push", ...)' | xargs -I_target bazel run _target -- --tag ${GITHUB_SHA}
+          echo ${{ runner.os }}
+      - name: Setup upterm session
+        uses: lhotari/action-upterm@v1
